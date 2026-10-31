@@ -204,9 +204,10 @@ def make_drawer(plan, notes, fur):
     sprites = {k: Image.fromarray(v) for k, v in build_sprites(fur).items()}
     note_font = ImageFont.truetype(str(SERIF_L), 64)
     # 画面上部は問いかけだけ。番号は画面に出さず、YouTubeのタイトル末尾にだけ付ける
-    header = Image.new("RGB", (W, 300), tuple(int(c) for c in BG))
+    header = Image.new("RGB", (W, 400), tuple(int(c) for c in BG))
     d = ImageDraw.Draw(header)
-    draw_text(d, (W / 2, 170), "このねこ、何の曲を弾く？", SERIF_L, 76, (244, 240, 230), tracking=4)
+    # 上端に寄せすぎると、チャンネル一覧の切り抜きやShortsの上部ボタンに文字がかかるので少し下げる
+    draw_text(d, (W / 2, 290), "このねこ、何の曲を弾く？", SERIF_L, 76, (244, 240, 230), tracking=4)
     press = [(s * STEP, key, vel) for s, key, vel in notes]
 
     def draw(t, fade=True):
@@ -232,7 +233,7 @@ def make_drawer(plan, notes, fur):
             if 0 <= age < 1.2:
                 a = 1 - age / 1.2
                 cx = (k["x0"] + k["x1"]) / 2 + 18 * math.sin(age * 5 + k["midi"])
-                cy = KEY_TOP - SPRITE_H - 30 - 320 * age
+                cy = KEY_TOP - SPRITE_H - 30 - 250 * age  # 問いかけの文字に届かない高さまで
                 col = tuple(int(BG[i] + (key_color(k)[i] - BG[i]) * a) for i in range(3))
                 d.text((cx, cy), "♪", font=note_font, fill=col, anchor="mm")
         # ねこ
