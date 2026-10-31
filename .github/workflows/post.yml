@@ -2,7 +2,7 @@ name: post
 
 on:
   ## 本命の毎日19:37 JSTは cron-job.org から workflow_dispatch(scheduled=true)で起動する。
-  # GitHubの定期実行は遅延・スキップがあるので、予備としてだけ残す(UTCで記述)
+  ## GitHubの定期実行は遅延・スキップがあるので、予備としてだけ残す(UTCで記述)
   schedule:
     - cron: "37 12 * * *"  # 毎日 21:37 JST(予備。その日すでに投稿済みなら check ジョブで止まる)
   workflow_dispatch:
