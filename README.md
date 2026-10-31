@@ -69,7 +69,7 @@ Actions → post → Run workflow で、まず `dry_run` にチェックを入�
 ### 6. cron-job.org
 | 項目 | 値 |
 |---|---|
-| URL | `https://api.github.com/repos/<オーナー>/<リポジトリ>/actions/workflows/post.yml/dispatches` |
+| URL | `https://api.github.com/repos/2000Re/neko-kimagure-piano/actions/workflows/post.yml/dispatches` |
 | 実行スケジュール | 毎日 19:37、タイムゾーン Asia/Tokyo |
 | Request method | `POST` |
 | Headers | `Accept: application/vnd.github+json`<br>`Authorization: Bearer <トークン>`<br>`X-GitHub-Api-Version: 2022-11-28`<br>`Content-Type: application/json` |
