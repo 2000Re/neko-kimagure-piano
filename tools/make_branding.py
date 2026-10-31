@@ -18,34 +18,6 @@ from text import SERIF_L, draw_text  # noqa: E402
 
 BGC = tuple(int(c) for c in BG)
 
-# 正面を向いたねこの顔(16x13)。F=毛 B=口元・目のハイライト D=目 P=鼻・耳の内側
-FACE = [
-    "..F..........F..",
-    "..FF........FF..",
-    "..FPF......FPF..",
-    "..FPFFFFFFFFPF..",
-    ".FFFFFFFFFFFFFF.",
-    ".FFFFFFFFFFFFFF.",
-    ".FFBDFFFFFFBDFF.",
-    ".FFDDFFFFFFDDFF.",
-    ".FFFFFFPPFFFFFF.",
-    ".FFFFFBBBBFFFFF.",
-    "..FFFFBBBBFFFF..",
-    "...FFFFFFFFFF...",
-    ".....FFFFFF.....",
-]
-
-
-def face(fur, px):
-    img = Image.new("RGBA", (16 * px, len(FACE) * px), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    for y, row in enumerate(FACE):
-        for x, c in enumerate(row):
-            if c != ".":
-                d.rectangle([x * px, y * px, (x + 1) * px - 1, (y + 1) * px - 1], fill=FURS[fur][c])
-    return img
-
-
 def note_color(i, n):
     h = (0.55 + i / n * 0.8) % 1.0
     return tuple(int(c) for c in hsv_to_rgb(np.array([h]), np.array([0.6]), np.array([1.0]))[0] * 255)
@@ -64,14 +36,18 @@ def keyboard(d, x0, y0, width, height, n_white, pressed=()):
 
 
 def icon(path, fur):
+    """横向きに歩くねこが鍵盤の上にいるアイコン。円に切り抜かれても収まる大きさにしている。"""
     size = 800
     img = Image.new("RGB", (size, size), BGC)
     d = ImageDraw.Draw(img)
-    keyboard(d, -40, 560, size + 80, 260, 9, pressed=(3, 5))
-    f = face(fur, 30)
-    img.paste(f, ((size - f.width) // 2, 560 - f.height + 10), f)
-    font = ImageFont.truetype(str(SERIF_L), 120)
-    for (x, y), i in (((150, 200), 2), ((660, 150), 6)):
+    key_top = 540
+    keyboard(d, -40, key_top, size + 80, 300, 9, pressed=(3, 5))
+    cat = Image.fromarray(_render(cat_rows("walk"), cat_tail(), fur))
+    scale = 560 / cat.width
+    cat = cat.resize((int(cat.width * scale), int(cat.height * scale)), Image.NEAREST)
+    img.paste(cat, ((size - cat.width) // 2, key_top - cat.height + 6), cat)
+    font = ImageFont.truetype(str(SERIF_L), 110)
+    for (x, y), i in (((330, 260), 2), ((430, 150), 6)):  # しっぽと頭の間、背中の上
         d.text((x, y), "♪", font=font, fill=note_color(i, 9), anchor="mm")
     img.save(path)
     print(path)
@@ -83,15 +59,14 @@ def banner(path, fur, name):
     d = ImageDraw.Draw(img)
     keyboard(d, 0, 1000, w, 440, 28, pressed=(5, 9, 16, 21))   # 下部の鍵盤(PC・テレビで見える)
     cx, cy = w / 2, h / 2
-    draw_text(d, (cx, cy - 20), name, SERIF_L, 112, (246, 242, 232), tracking=10)
-    draw_text(d, (cx, cy - 150), "ねこが歩くと、音楽になる。", SERIF_L, 50, (170, 180, 205), tracking=8)
-    draw_text(d, (cx, cy + 115), "毎日1曲 ・ 同じ曲は二度とできません", SERIF_L, 40, (150, 158, 185), tracking=4)
+    draw_text(d, (cx, cy - 85), "ねこが歩くと、音楽になる。", SERIF_L, 50, (170, 180, 205), tracking=8)
+    draw_text(d, (cx, cy + 45), name, SERIF_L, 112, (246, 242, 232), tracking=10)
     # 歩くねこ(安全領域の左端)と音符(右端)
     cat = Image.fromarray(_render(cat_rows("walk"), cat_tail(), fur))
     cat = cat.resize((cat.width * 9 // 14, cat.height * 9 // 14), Image.NEAREST)
-    img.paste(cat, (int(cx - 765), int(cy + 140 - cat.height)), cat)
+    img.paste(cat, (int(cx - 765), int(cy + 195 - cat.height)), cat)  # 名前の行より下に置く
     font = ImageFont.truetype(str(SERIF_L), 90)
-    for k, (dx, dy) in enumerate(((680, -90), (740, -10), (700, 80))):
+    for k, (dx, dy) in enumerate(((680, -60), (740, 15), (700, 90))):
         d.text((cx + dx, cy + dy), "♪", font=font, fill=note_color(k * 5 + 3, 20), anchor="mm")
     img.save(path)
     print(path)
