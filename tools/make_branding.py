@@ -57,17 +57,20 @@ def banner(path, fur, name):
     w, h = 2560, 1440
     img = Image.new("RGB", (w, h), BGC)
     d = ImageDraw.Draw(img)
-    keyboard(d, 0, 1000, w, 440, 28, pressed=(5, 9, 16, 21))   # 下部の鍵盤(PC・テレビで見える)
     cx, cy = w / 2, h / 2
-    draw_text(d, (cx, cy - 85), "ねこが歩くと、音楽になる。", SERIF_L, 50, (170, 180, 205), tracking=8)
-    draw_text(d, (cx, cy + 45), name, SERIF_L, 112, (246, 242, 232), tracking=10)
-    # 歩くねこ(安全領域の左端)と音符(右端)
+    # 鍵盤の上端を、全デバイスで表示される範囲(縦 509〜931)の下端近くに置く。
+    # スマホでも、ねこと鍵盤の上の帯が見える
+    key_top = 880
+    keyboard(d, 0, key_top, w, h - key_top, 28, pressed=(5, 9, 16, 21))
+    draw_text(d, (cx, cy - 150), "ねこが歩くと、音楽になる。", SERIF_L, 50, (170, 180, 205), tracking=8)
+    draw_text(d, (cx, cy - 30), name, SERIF_L, 112, (246, 242, 232), tracking=10)
+    # 鍵盤の上を歩くねこ(左寄り)と、鍵盤から立ちのぼる音符(右寄り)
     cat = Image.fromarray(_render(cat_rows("walk"), cat_tail(), fur))
     cat = cat.resize((cat.width * 9 // 14, cat.height * 9 // 14), Image.NEAREST)
-    img.paste(cat, (int(cx - 765), int(cy + 195 - cat.height)), cat)  # 名前の行より下に置く
-    font = ImageFont.truetype(str(SERIF_L), 90)
-    for k, (dx, dy) in enumerate(((680, -60), (740, 15), (700, 90))):
-        d.text((cx + dx, cy + dy), "♪", font=font, fill=note_color(k * 5 + 3, 20), anchor="mm")
+    img.paste(cat, (int(cx - 700), key_top - cat.height + 4), cat)
+    font = ImageFont.truetype(str(SERIF_L), 80)
+    for k, (dx, dy) in enumerate(((560, -50), (620, -120), (680, -60))):
+        d.text((cx + dx, key_top + dy), "♪", font=font, fill=note_color(k * 5 + 3, 20), anchor="mm")
     img.save(path)
     print(path)
 
