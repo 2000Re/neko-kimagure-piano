@@ -1,0 +1,5 @@
+out/
+samples/
+__pycache__/
+*.wav
+client_secret*.json

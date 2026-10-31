@@ -1,0 +1,143 @@
+name: post
+
+on:
+  ## 本命の毎日19:37 JSTは cron-job.org から workflow_dispatch(scheduled=true)で起動する。
+  # GitHubの定期実行は遅延・スキップがあるので、予備としてだけ残す(UTCで記述)
+  schedule:
+    - cron: "37 12 * * *"  # 毎日 21:37 JST(予備。その日すでに投稿済みなら check ジョブで止まる)
+  workflow_dispatch:
+    inputs:
+      scheduled:
+        description: "定期実行として扱う(cron-job.org 用。手動では通常オフ)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "動画の生成だけ行い、投稿しない"
+        type: boolean
+        default: false
+      privacy:
+        description: "公開設定"
+        type: choice
+        options: [public, unlisted, private]
+        default: public
+
+# 同時に2本走ると連番と履歴が衝突するので直列化する
+concurrency:
+  group: post
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check:
+    # 定期実行(GitHubの schedule と、cron-job.org からの scheduled=true)は、
+    # リポジトリ変数 AUTO_POST が true のときだけ動き、今日すでに投稿済みなら止まる。
+    # 手動実行(Run workflow)はいつでも動き、「今日は投稿済み」のチェックもしない
+    if: ${{ (github.event_name != 'schedule' && github.event.inputs.scheduled != 'true') || vars.AUTO_POST == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check if already posted today
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULED: ${{ github.event.inputs.scheduled }}
+        run: |
+          if [ "$EVENT" = "schedule" ] || [ "$SCHEDULED" = "true" ]; then
+            python3 posted_today.py
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  generate:
+    needs: check
+    if: ${{ needs.check.outputs.skip != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: pip install -r requirements.txt
+      - name: Generate video
+        run: python make_video.py --out out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: video
+          path: out/
+          retention-days: 14
+
+  upload:
+    needs: generate
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      token_invalid: ${{ steps.upload.outputs.token_invalid }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: video
+          path: out
+      - name: Upload to YouTube
+        id: upload
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_CHANNEL_ID: ${{ secrets.YT_CHANNEL_ID }}
+          PRIVACY: ${{ inputs.privacy || 'public' }}
+        run: python youtube_upload.py --dir out --privacy "$PRIVACY"
+      - name: Commit upload history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add upload_history.json
+          git add thumbnails/ 2>/dev/null || true  # 静止画がない回でも履歴のコミットは止めない
+          git commit -m "Upload #$(python -c 'import json;print(json.load(open("out/meta.json"))["number"])')"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep $((2 ** i))
+          done
+          exit 1
+
+  notify-failure:
+    needs: [check, generate, upload]
+    if: ${{ failure() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Open or update an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TOKEN_INVALID: ${{ needs.upload.outputs.token_invalid }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$TOKEN_INVALID" = "true" ]; then
+            label=token-invalid
+            title="YouTubeのリフレッシュトークンが無効になりました"
+            body="READMEの「リフレッシュトークンの取得」の手順で再取得し、Secretsの YT_REFRESH_TOKEN を更新してください。"
+          else
+            label=post-failure
+            title="自動投稿が失敗しました"
+            body="ログを確認してください。"
+          fi
+          gh label create "$label" --color d73a4a --force >/dev/null
+          existing=$(gh issue list --label "$label" --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "再発: $RUN_URL"
+          else
+            gh issue create --label "$label" --title "$title" --body "$body"$'\n\n'"$RUN_URL"
+          fi
