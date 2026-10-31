@@ -41,8 +41,22 @@ KEYS = build_keys()
 BLACKS = [k for k in KEYS if k["black"]]
 
 
-def key_at(x, mode="all"):
-    """足の x 座標 → 押される鍵盤。"""
+MAJOR_PENTATONIC = (0, 2, 4, 7, 9)
+
+
+def scale_of(root):
+    """ルート音(0=ド〜11=シ)の長調ペンタトニックに含まれる音名の集合。"""
+    return {(root + d) % 12 for d in MAJOR_PENTATONIC}
+
+
+def key_at(x, mode="all", scale=None):
+    """足の x 座標 → 押される鍵盤。
+
+    scale を渡すと、足に一番近い「その音階の鍵盤」を押す(どう踏んでも濁らない)。
+    """
+    if scale is not None:
+        return min((k for k in KEYS if k["midi"] % 12 in scale),
+                   key=lambda k: abs((k["x0"] + k["x1"]) / 2 - x))
     if mode == "black":
         return min(BLACKS, key=lambda k: abs((k["x0"] + k["x1"]) / 2 - x))
     for k in BLACKS:  # 黒鍵は白鍵の上に乗っているので先に判定
@@ -74,7 +88,7 @@ GAITS = {  # 足の運び: 着地ごとにどの足で押すか(繰り返し)
 }
 
 
-def plan_and_notes(rng, mode="all"):
+def plan_and_notes(rng, mode="all", scale=None):
     """ステップごとの行動と、打鍵(ステップ・鍵盤・強さ)を作る。
 
     歩くたびに「歩き方」(歩幅・テンポ・足の運び・ためらい)を毎回ランダムに決めるので、
@@ -100,7 +114,7 @@ def plan_and_notes(rng, mode="all"):
                         paws = gait[landing % len(gait)] if gait else rng.choice([[FRONT], [BACK], [MID]])
                         vel = 0.7 if len(paws) > 1 else 0.85
                         for px in paws:
-                            notes.append((s0 + i, key_at(paw_x(x, facing, px), mode), vel))
+                            notes.append((s0 + i, key_at(paw_x(x, facing, px), mode, scale), vel))
                     landing += 1
                 plan.append({"x": x, "facing": facing, "state": "walk", "i": i, "n": n, "leg": leg})
                 x += stride * facing
@@ -115,7 +129,7 @@ def plan_and_notes(rng, mode="all"):
             plan += [{"x": x, "facing": facing, "state": "sit", "i": i, "n": n} for i in range(n)]
             # 座った瞬間に、おしりの下の鍵盤を1〜3つ、そっと押す
             for px in rng.sample([4, 7, 10], rng.randint(1, 3)):
-                notes.append((s0, key_at(paw_x(x, facing, px), mode), 0.5))
+                notes.append((s0, key_at(paw_x(x, facing, px), mode, scale), 0.5))
             state = "walk"
         else:
             if not 0 <= x + JUMP_PX * JUMP_STEPS * facing <= MAX_X:
@@ -127,7 +141,7 @@ def plan_and_notes(rng, mode="all"):
             land = s0 + JUMP_STEPS - 1
             lx = x - JUMP_PX * facing
             for px in ([FRONT, BACK] if rng.random() < 0.6 else [FRONT, MID, BACK]):
-                notes.append((land, key_at(paw_x(lx, facing, px), mode), 1.0))
+                notes.append((land, key_at(paw_x(lx, facing, px), mode, scale), 1.0))
             state = "walk"
     plan = plan[:N_STEPS]
     last = (DURATION - FADE_OUT + 0.4) / STEP  # フェードアウト中は新しい音を鳴らさない
