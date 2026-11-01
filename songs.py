@@ -50,6 +50,16 @@ MELODIES = {
                "G4:1.5 A4:0.5 G4:1 F4:1 E4:1 F4:1 G4:2 D4:1 E4:1 F4:2 E4:1 F4:1 G4:2", 7),
     "jinglebells": ("ジングルベル", 0.33,
                     "E5:1 E5:1 E5:2 E5:1 E5:1 E5:2 E5:1 G5:1 C5:1.5 D5:0.5 E5:4"),
+    # ---- クリスマスの曲(12月に優先して選ぶ。CHRISTMAS を参照)
+    "silentnight": ("きよしこの夜", 0.25,
+                    "G4:1.5 A4:0.5 G4:1 E4:3 G4:1.5 A4:0.5 G4:1 E4:3 D5:2 D5:1 B4:3 C5:2 C5:1 G4:3"),
+    "joytotheworld": ("もろびとこぞりて", 0.3,
+                      "C5:2 B4:1.5 A4:0.5 G4:3 F4:1 E4:2 D4:2 C4:3", 5),
+    "wewish": ("おめでとうクリスマス", 0.33,
+               "G4:1 C5:1 C5:0.5 D5:0.5 C5:0.5 B4:0.5 A4:1 A4:1 A4:1 D5:1 D5:0.5 E5:0.5 D5:0.5 C5:0.5 "
+               "B4:1 G4:1 G4:1 A4:1 D5:1 B4:1 C5:2"),
+    "deckthehalls": ("ひいらぎかざろう", 0.33,
+                     "G5:1.5 F5:0.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 D5:0.5 E5:0.5 F5:0.5 D5:0.5 E5:1.5 D5:0.5 C5:1 B4:1 C5:2"),
     "joy": ("歓喜の歌(ベートーヴェン)", 0.34,
             "E4:1 E4:1 F4:1 G4:1 G4:1 F4:1 E4:1 D4:1 C4:1 C4:1 D4:1 E4:1 E4:1.5 D4:0.5 D4:2", 7),
     "unmei": ("運命(ベートーヴェン)", 0.17,
@@ -110,6 +120,9 @@ def nekofunjatta():
         T += 4 * e
     return [(round(t, 4), ms, v) for t, ms, v in ev]
 
+
+# 12月は、知っている曲の回をクリスマスの曲から選ぶ。12月以外はクリスマスの曲を選ばない
+CHRISTMAS = {"jinglebells", "silentnight", "joytotheworld", "wewish", "deckthehalls"}
 
 # 曲のID → (曲名, 打鍵リストを作る関数)
 SONGS = {"nekofunjatta": ("ねこふんじゃった", nekofunjatta)}
