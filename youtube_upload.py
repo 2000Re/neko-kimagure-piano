@@ -78,7 +78,7 @@ def upload(token, video_path, meta, privacy):
             "title": meta["title"],
             "description": meta["description"],
             "tags": meta["tags"],
-            "categoryId": "28",  # Science & Technology
+            "categoryId": "10",  # Music
             "defaultLanguage": "ja",
         },
         "status": {
