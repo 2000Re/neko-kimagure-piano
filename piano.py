@@ -251,20 +251,25 @@ def make_drawer(plan, notes, fur):
                 col = tuple(int(BG[i] + (key_color(k)[i] - BG[i]) * a) for i in range(3))
                 d.text((cx, cy), "♪", font=note_font, fill=col, anchor="mm")
         # ねこ
-        s = min(int(t / STEP), N_STEPS - 1)
-        frac = t / STEP - s
-        pl = plan[s]
-        nx = plan[min(s + 1, N_STEPS - 1)]
-        x = pl["x"] + (nx["x"] - pl["x"]) * frac if nx["state"] == pl["state"] else pl["x"]
-        yoff = 0
-        if pl["state"] == "walk":
-            name, yoff = f"walk{pl['leg']}", (0 if pl["leg"] == 0 else -3)
-        elif pl["state"] == "sit":
-            name = f"sit{(pl['i'] // 3) % 2}" + ("_blink" if pl["i"] == pl["n"] // 2 else "")
+        if "sprite" in plan[0]:  # 知っている曲の回: コマごとの姿が決まっている(songs.py)
+            fr = plan[min(int(round(t * FPS)), len(plan) - 1)]
+            spr = sprites[(fr["sprite"] + ("_blink" if fr.get("blink") else ""), fr["facing"])]
+            x, yoff = fr["x"], fr["yoff"]
         else:
-            name = "jump"
-            yoff = -int(JUMP_HEIGHT * math.sin(math.pi * (pl["i"] + frac) / pl["n"]))
-        spr = sprites[(name, pl["facing"])]
+            s = min(int(t / STEP), N_STEPS - 1)
+            frac = t / STEP - s
+            pl = plan[s]
+            nx = plan[min(s + 1, N_STEPS - 1)]
+            x = pl["x"] + (nx["x"] - pl["x"]) * frac if nx["state"] == pl["state"] else pl["x"]
+            yoff = 0
+            if pl["state"] == "walk":
+                name, yoff = f"walk{pl['leg']}", (0 if pl["leg"] == 0 else -3)
+            elif pl["state"] == "sit":
+                name = f"sit{(pl['i'] // 3) % 2}" + ("_blink" if pl["i"] == pl["n"] // 2 else "")
+            else:
+                name = "jump"
+                yoff = -int(JUMP_HEIGHT * math.sin(math.pi * (pl["i"] + frac) / pl["n"]))
+            spr = sprites[(name, pl["facing"])]
         img.paste(spr, (int(x), KEY_TOP - SPRITE_H + 2 + yoff), spr)
         frame = np.asarray(img, dtype=np.float64)
         if fade and t > DURATION - FADE_OUT:
