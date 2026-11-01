@@ -122,7 +122,7 @@ def nekofunjatta():
     return [(round(t, 4), ms, v) for t, ms, v in ev]
 
 
-# 12月は、知っている曲の回をクリスマスの曲から選ぶ。12月以外はクリスマスの曲を選ばない
+# 12月は2回に1回クリスマスの曲を選ぶ(make_video.pick_song)。12月以外はクリスマスの曲を選ばない
 CHRISTMAS = {"jinglebells", "silentnight", "joytotheworld", "wewish", "deckthehalls"}
 
 # 曲のID → (曲名, 打鍵リストを作る関数)

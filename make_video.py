@@ -3,7 +3,7 @@
 upload_history.json を見て連番を決め、演奏を選び、out/ に video.mp4・thumbnail.jpg(サムネイル用の静止画)・meta.json(タイトル・説明文など)を書き出す。
 
 ねこが弾くのは、だれでも知っている曲(作者の死後70年以上たった曲。songs.py)だけ。
-曲は、まだ使っていない曲(使った回数が少ない曲)から選ぶ。12月はクリスマスの曲から選ぶ。
+曲は、まだ使っていない曲(使った回数が少ない曲)から選ぶ。12月は2回に1回クリスマスの曲を選ぶ。
 (以前の「気まぐれに歩いて踏んだ音を鳴らす」回は、2026年11月にやめた。piano.py に処理は残っている)
 
 使い方:
@@ -58,7 +58,8 @@ RECENT = 3
 
 def pick_song(history, rng, month, only=None):
     """使った回数が一番少ない曲から、ランダムに1曲選ぶ。全部使い終えたら2周目に入る。
-    12月(日本時間)はクリスマスの曲だけから選び、12月以外はクリスマスの曲を除く。
+    12月(日本時間)は2回に1回クリスマスの曲を選ぶ(前の回がクリスマスの曲でなければクリスマスの曲)。
+    12月以外はクリスマスの曲を除く。
     周の変わり目などで同じ曲が続かないよう、直近 RECENT 回に使った曲は(選べる曲が残る限り)避ける。
     返り値は (曲ID, その曲を使うのが何回目か)。only で曲を指定できる(試作用)。"""
     used = {}
@@ -67,7 +68,8 @@ def pick_song(history, rng, month, only=None):
             used[h["song"]] = used.get(h["song"], 0) + 1
     if only:
         return only, used.get(only, 0) + 1
-    pool = [k for k in songs.SONGS if (k in songs.CHRISTMAS) == (month == 12)]
+    christmas = month == 12 and not (history and history[-1].get("song") in songs.CHRISTMAS)
+    pool = [k for k in songs.SONGS if (k in songs.CHRISTMAS) == christmas]
     recent = {h.get("song") for h in history[-RECENT:]}
     pool = [k for k in pool if k not in recent] or pool
     least = min(used.get(k, 0) for k in pool)

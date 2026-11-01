@@ -7,7 +7,7 @@
 - 弾くのは、作者の死後70年以上たった曲か、作者不明の古い曲(民謡など)のメロディだけ(`songs.py`)。
   メロディの鍵盤を足が踏むように、ねこの立ち位置・歩く・跳ねるを決める(鳴るのは足の下の鍵盤だけ)
 - 曲は使った回数が少ないものから選び、一巡したら2周目に入る。直近3回に使った曲は避ける。
-  12月(日本時間)はクリスマスの曲だけから選び、12月以外はクリスマスの曲を選ばない(`songs.CHRISTMAS`)
+  12月(日本時間)は2回に1回クリスマスの曲を選び、12月以外はクリスマスの曲を選ばない(`songs.CHRISTMAS`)
 - 説明文に曲名は書かない(何の曲かを当ててもらう)
 - 2026年11月までは、ねこが気まぐれに歩いて踏んだ音を鳴らす回もあった(`piano.py` に処理が残っている)
 
@@ -37,7 +37,7 @@ pip install -r requirements.txt
 python3 make_video.py --out out              # 本番と同じ選び方で1本
 python3 make_video.py --out out --seed 1     # シード指定
 python3 make_video.py --out out --song twinkle   # 曲を指定(曲IDは songs.py)
-python3 make_video.py --out out --month 12       # 12月として選ぶ(クリスマスの曲)
+python3 make_video.py --out out --month 12       # 12月として選ぶ
 ```
 
 ## 初回セットアップ
