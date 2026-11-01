@@ -2,14 +2,14 @@
 
 upload_history.json を見て連番を決め、演奏を選び、out/ に video.mp4・thumbnail.jpg(サムネイル用の静止画)・meta.json(タイトル・説明文など)を書き出す。
 
-2回に1回(偶数回)は、知っている曲(作者の死後70年以上たった曲。songs.py)をねこが弾く。
+ねこが弾くのは、だれでも知っている曲(作者の死後70年以上たった曲。songs.py)だけ。
 曲は、まだ使っていない曲(使った回数が少ない曲)から選ぶ。12月はクリスマスの曲から選ぶ。
-奇数回はこれまでどおり、ねこが気まぐれに歩いて、過去と同じにならない曲を作る。
+(以前の「気まぐれに歩いて踏んだ音を鳴らす」回は、2026年11月にやめた。piano.py に処理は残っている)
 
 使い方:
   python3 make_video.py                 # 本番と同じ(履歴を見て次の1本)
   python3 make_video.py --seed 1        # シード指定の試作
-  python3 make_video.py --song twinkle  # 知っている曲の回の試作(--song random で通常回)
+  python3 make_video.py --song twinkle  # 曲を指定した試作
 """
 import argparse
 import json
@@ -31,22 +31,15 @@ def youtube_title(number):
     return f"ねこが歩くと、音楽になる。🐾 #{number}"
 
 
-def youtube_description(fur, known_song=False):
-    # 知っている曲の回も、曲名は書かない(何の曲かを当ててもらう)
-    if known_song:
-        lines = ["今日のねこは、どこかで聞いたことのあるメロディを弾いているようです。",
-                 "",
-                 f"今日のねこ: {FUR_JP[fur]}",
-                 "何の曲か分かったら、コメントで教えてください。"]
-    else:
-        lines = ["歩き方も、座るタイミングも、跳ねる場所も毎回ちがうので、同じ曲は二度とできません。",
-                 "",
-                 f"今日のねこ: {FUR_JP[fur]}",
-                 "何の曲に聞こえたか、コメントで教えてください。"]
+def youtube_description(fur):
+    # 曲名は書かない(何の曲かを当ててもらう)
     return "\n".join([
         "ドット絵のねこが、ピアノの鍵盤の上を歩きます。",
         "足が踏んだ鍵盤の音が、そのまま流れています。",
-        *lines,
+        "今日のねこは、どこかで聞いたことのあるメロディを弾いているようです。",
+        "",
+        f"今日のねこ: {FUR_JP[fur]}",
+        "何の曲か分かったら、コメントで教えてください。",
         "",
         "#ねこ #猫 #ピアノ #ドット絵 #shorts",
     ])
@@ -60,14 +53,13 @@ def load_history(path):
     return json.loads(path.read_text()) if path.exists() else []
 
 
-def is_song_episode(number):
-    """2回に1回(偶数回)は知っている曲。"""
-    return number % 2 == 0
+RECENT = 3
 
 
 def pick_song(history, rng, month, only=None):
     """使った回数が一番少ない曲から、ランダムに1曲選ぶ。全部使い終えたら2周目に入る。
     12月(日本時間)はクリスマスの曲だけから選び、12月以外はクリスマスの曲を除く。
+    周の変わり目などで同じ曲が続かないよう、直近 RECENT 回に使った曲は(選べる曲が残る限り)避ける。
     返り値は (曲ID, その曲を使うのが何回目か)。only で曲を指定できる(試作用)。"""
     used = {}
     for h in history:
@@ -76,6 +68,8 @@ def pick_song(history, rng, month, only=None):
     if only:
         return only, used.get(only, 0) + 1
     pool = [k for k in songs.SONGS if (k in songs.CHRISTMAS) == (month == 12)]
+    recent = {h.get("song") for h in history[-RECENT:]}
+    pool = [k for k in pool if k not in recent] or pool
     least = min(used.get(k, 0) for k in pool)
     song_id = rng.choice(sorted(k for k in pool if used.get(k, 0) == least))
     return song_id, used.get(song_id, 0) + 1
@@ -88,28 +82,23 @@ def main():
     ap.add_argument("--seed", type=int)
     ap.add_argument("--number", type=int, help="連番を上書きする(試作用)")
     ap.add_argument("--fur", choices=list(FURS))
-    ap.add_argument("--song", choices=["random", *songs.SONGS], help="曲を指定する(試作用)")
+    ap.add_argument("--song", choices=list(songs.SONGS), help="曲を指定する(試作用)")
     ap.add_argument("--month", type=int, help="月を上書きする(試作用。12でクリスマスの曲)")
     args = ap.parse_args()
 
     history = load_history(args.history)
     number = args.number or max((h["number"] for h in history), default=0) + 1
-    used = {h["key"] for h in history}
 
     seed = args.seed if args.seed is not None else random.SystemRandom().randrange(2**32)
-    song_id = None
-    if args.song not in (None, "random") or (args.song is None and is_song_episode(number)):
-        rng = random.Random(seed)
-        month = args.month or datetime.now(ZoneInfo("Asia/Tokyo")).month
-        song_id, nth = pick_song(history, rng, month, only=args.song)
-        plan, notes = songs.plan_song(songs.SONGS[song_id][1]())
-        bad = songs.check_paws(plan, notes)
-        if bad:
-            raise RuntimeError(f"{song_id}: ねこの足が鍵盤に乗っていない打鍵がある {bad}")
-        # 同じ曲を2周目以降に使っても投稿済みチェックにかからないよう、何回目かを含める
-        signature = f"song:{song_id}:{nth}"
-    else:
-        rng, plan, notes, signature = piano.pick_performance(seed, used_signatures=used)
+    rng = random.Random(seed)
+    month = args.month or datetime.now(ZoneInfo("Asia/Tokyo")).month
+    song_id, nth = pick_song(history, rng, month, only=args.song)
+    plan, notes = songs.plan_song(songs.SONGS[song_id][1]())
+    bad = songs.check_paws(plan, notes)
+    if bad:
+        raise RuntimeError(f"{song_id}: ねこの足が鍵盤に乗っていない打鍵がある {bad}")
+    # 同じ曲を2周目以降に使っても投稿済みチェックにかからないよう、何回目かを含める
+    signature = f"song:{song_id}:{nth}"
     fur = args.fur or rng.choice(list(FURS))
 
     out = Path(args.out)
@@ -121,15 +110,14 @@ def main():
 
     meta = {
         "number": number,
-        "key": signature,  # 曲の署名(音程差の並び / 知っている曲は song:曲ID:何回目)。重複判定に使う
+        "key": signature,  # song:曲ID:何回目。投稿済みチェックに使う(以前の気まぐれの回は音程差の並び)
         "title": youtube_title(number),
-        "description": youtube_description(fur, known_song=song_id is not None),
+        "description": youtube_description(fur),
         "tags": TAGS,
         "params": {"seed": seed, "fur": fur, "notes": len(notes), "song": song_id},
     }
     (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2))
-    what = songs.SONGS[song_id][0] if song_id else "気まぐれ"
-    print(f"#{number} {meta['title']} ({FUR_JP[fur]}, {what}, {len(notes)}音)\n  -> {out / 'video.mp4'}")
+    print(f"#{number} {meta['title']} ({FUR_JP[fur]}, {songs.SONGS[song_id][0]}, {len(notes)}音)\n  -> {out / 'video.mp4'}")
 
 
 if __name__ == "__main__":
