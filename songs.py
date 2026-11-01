@@ -4,6 +4,7 @@
 その鍵盤を足が踏むように、ねこの立ち位置・向き・歩く/跳ねるを決める。
 音は今までどおり「足の下の鍵盤」が鳴る(ねこがその鍵盤の上にいるときにだけ鳴らす)。
 """
+import bisect
 import math
 
 from cat_sprites import PX
@@ -163,10 +164,21 @@ def fit_pose(keys, facing, prev_x):
     return best[1]
 
 
-def plan_song(events):
+def sit_pose(ts):
+    """座ってから ts 秒の姿。ときどきまばたきし、長く座っているとしっぽを動かす。
+    (7秒のShortsでは、座っている時間が4秒未満なので、しっぽは動かず、まばたきは1回だけ)"""
+    tail = 0 if ts < 4 else int((ts - 4) / 1.5) % 2
+    return {"sprite": f"sit{tail}", "yoff": 0, "blink": 0.9 < ts % 3.5 < 1.05}
+
+
+SIT_GAP = 2.0  # 次の音までこれ以上あくときは、いったん座って待つ(長い動画の間奏など)
+
+
+def plan_song(events, duration=DURATION):
     """曲の打鍵 → (コマごとのねこの姿, 打鍵リスト)。
 
     姿は {x, facing, sprite, yoff}。打鍵は通常回と同じ (ステップ, 鍵盤, 強さ)。
+    duration は動画の長さ(秒)。Shortsは7秒、長い動画にも使える。
     """
     centers = [sum(center(m) for m in ms) / len(ms) for _, ms, _ in events]
     poses = []
@@ -182,26 +194,34 @@ def plan_song(events):
             x = fit_pose(ms, facing, centers[i] if x is None else x)
         poses.append((t, x, facing))
 
-    n_frames = int(DURATION * FPS)
+    n_frames = int(duration * FPS)
+    times = [p[0] for p in poses]
     frames = []
     for fi in range(n_frames):
         t = fi / FPS
         # 今いる区間: 最後に踏んだ打鍵 i と次の打鍵 i+1
-        i = max([j for j, p in enumerate(poses) if p[0] <= t + 1e-6], default=-1)
+        i = bisect.bisect_right(times, t + 1e-6) - 1
         if i < 0:
             t1, x1, f1 = poses[0]
-            frames.append({"x": x1, "facing": f1, "sprite": "walk0", "yoff": 0})
+            if t1 > SIT_GAP and t < t1 - 0.5:  # 長い前奏: 座って待つ
+                frames.append({"x": x1, "facing": f1, **sit_pose(t)})
+            else:
+                frames.append({"x": x1, "facing": f1, "sprite": "walk0", "yoff": 0})
             continue
         t0, x0, f0 = poses[i]
         leg = i % 2
         if i == len(poses) - 1:
             # 弾き終えたら、少し間をおいてその場でおすわり
-            sit = t - t0 > 0.6
-            frames.append({"x": x0, "facing": f0, "sprite": ("sit0" if sit else f"walk{leg}"),
-                           "yoff": 0, "blink": sit and 0.9 < t - t0 - 0.6 < 1.05})
+            if t - t0 > 0.6:
+                frames.append({"x": x0, "facing": f0, **sit_pose(t - t0 - 0.6)})
+            else:
+                frames.append({"x": x0, "facing": f0, "sprite": f"walk{leg}", "yoff": 0})
             continue
         t1, x1, f1 = poses[i + 1]
         gap, dx = t1 - t0, x1 - x0
+        if gap > SIT_GAP and 0.6 < t - t0 < gap - 0.5:  # 長い休み: 座って待ち、少し前に立ち上がる
+            frames.append({"x": x0, "facing": f0, **sit_pose(t - t0 - 0.6)})
+            continue
         if abs(dx) > 1.3 * WK:      # 遠いので跳ねる
             dur = min(gap * 0.9, 0.42)
             start = t1 - dur
