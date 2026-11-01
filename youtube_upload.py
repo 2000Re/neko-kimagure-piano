@@ -172,6 +172,7 @@ def main():
         "fur": p["fur"],
         "key": meta["key"],
         "seed": p["seed"],
+        "song": p.get("song"),  # 知っている曲の回は曲ID(songs.py)。気まぐれの回は null
         "title": meta["title"],
         "video_id": video_id,
         "privacy": args.privacy,

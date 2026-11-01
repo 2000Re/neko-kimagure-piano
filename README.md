@@ -6,18 +6,22 @@
 - 動画の生成は外部APIに依存しない(numpy・Pillow・ffmpegのみ。フォントは `fonts/` に同梱)
 - ねこの行動(歩く・座る・跳ねる・振り返る)と歩き方(歩幅・テンポ・足の運び・ためらい)は毎回ランダム
 - 同じ曲は二度と作らない(曲の署名=音程差の並びで判定。移調しただけの同じ曲も同じとみなす)
+- 2回に1回(偶数回)は、だれでも知っている曲をねこが弾く(`songs.py`)。使うのは、作者の死後70年以上たった曲か
+  作者不明の古い曲(民謡など)のメロディだけ。メロディの鍵盤を足が踏むように、ねこの立ち位置・歩く・跳ねるを決める。
+  曲は使った回数が少ないものから選び、一巡したら2周目に入る。説明文にも曲名は書かない(何の曲かを当ててもらう)
 
 ## 仕組み
 
 | ファイル | 役割 |
 |---|---|
 | `piano.py` | 鍵盤・ねこの行動計画・打鍵・ピアノ音の合成・映像のレンダリング |
+| `songs.py` | 知っている曲の楽譜と、その鍵盤を踏むためのねこの動きの計算 |
 | `cat_sprites.py` | ドット絵のねこ(歩く2コマ・跳ねる・座る2コマ・まばたき、毛色4種) |
 | `make_video.py` | 履歴を見て連番と演奏を決め、`out/` に `video.mp4`・`thumbnail.jpg`・`meta.json` を出力 |
 | `youtube_upload.py` | `out/` をアップロードし、`upload_history.json` に追記(標準ライブラリのみ) |
 | `posted_today.py` | 定期実行で、最後の投稿から12時間以内か(=もう投稿済みか)を判定する |
 | `get_youtube_refresh_token.py` | リフレッシュトークンの取得(ローカルで一度だけ) |
-| `upload_history.json` | 投稿済み記録。`key` は曲の署名 |
+| `upload_history.json` | 投稿済み記録。`key` は曲の署名(知っている曲の回は `song:曲ID:何回目`)、`song` は曲ID |
 | `thumbnails/` | 投稿ごとの静止画(`001.jpg` など)。サムネイルを手動設定する用 |
 | `.github/workflows/post.yml` | 生成 → artifact → 投稿 → 履歴コミット。失敗時はIssueで通知 |
 
@@ -31,6 +35,8 @@ sudo apt install ffmpeg
 pip install -r requirements.txt
 python3 make_video.py --out out              # 本番と同じ選び方で1本
 python3 make_video.py --out out --seed 1     # シード指定
+python3 make_video.py --out out --song twinkle   # 知っている曲の回(曲IDは songs.py)
+python3 make_video.py --out out --song random    # 気まぐれの回
 ```
 
 ## 初回セットアップ
