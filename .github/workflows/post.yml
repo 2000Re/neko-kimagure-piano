@@ -113,8 +113,59 @@ jobs:
           done
           exit 1
 
+  # Shortsと同じ曲・同じねこの lo-fi 横長動画を作り、Shortsの1時間後に公開されるよう予約してアップロードする。
+  # 失敗してもShortsの投稿には影響しない(失敗はIssueで通知)。dry_run のときは作るだけ(artifactで確認できる)
+  lofi:
+    needs: [generate, upload]
+    if: ${{ !cancelled() && needs.generate.result == 'success' && (inputs.dry_run || needs.upload.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: video
+          path: out
+      - name: Generate lo-fi video
+        run: python lofi.py --meta out/meta.json --out out_lofi
+      - if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: lofi
+          path: out_lofi/
+          retention-days: 7
+      - name: Upload to YouTube (scheduled)
+        if: ${{ !inputs.dry_run }}
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_CHANNEL_ID: ${{ secrets.YT_CHANNEL_ID }}
+        run: |
+          git pull --ff-only origin "$GITHUB_REF_NAME"  # upload ジョブが書いた履歴を取り込む
+          python youtube_upload.py --lofi --dir out_lofi
+      - name: Commit upload history
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add upload_history.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Upload lo-fi for #$(python -c 'import json;print(json.load(open("out/meta.json"))["number"])')"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep $((2 ** i))
+          done
+          exit 1
+
   notify-failure:
-    needs: [check, generate, upload]
+    needs: [check, generate, upload, lofi]
     if: ${{ failure() }}
     runs-on: ubuntu-24.04
     steps:

@@ -11,6 +11,12 @@
 - 説明文に曲名は書かない(何の曲かを当ててもらう)
 - 2026年11月までは、ねこが気まぐれに歩いて踏んだ音を鳴らす回もあった(`piano.py` に処理が残っている)
 
+- Shortsの1時間後に、同じ曲・同じねこの lo-fi 横長動画(1920x1080、2分前後)を予約公開する(`lofi.py`)。
+  タイトルは「曲名 lo-fi 🐾 ねこのきまぐれピアノ」で、Shortsのクイズの答え合わせを兼ねる。
+  前奏 → メイン → 3度を重ねたメイン → 間奏 → メイン → 後奏 の形に自動で組み、和音はメロディから自動で選ぶ
+  (しっくりこない曲は `lofi.LOFI` の `chords` で手書き)。ねこが弾くのはメロディだけで、
+  エレピ・ベース・ドラム・レコードのノイズ・雨音は部屋で流れているバンドの音として重ねる
+
 ## 仕組み
 
 | ファイル | 役割 |
@@ -19,12 +25,13 @@
 | `songs.py` | 知っている曲の楽譜と、その鍵盤を踏むためのねこの動きの計算 |
 | `cat_sprites.py` | ドット絵のねこ(歩く2コマ・跳ねる・座る2コマ・まばたき、毛色4種) |
 | `make_video.py` | 履歴を見て連番と演奏を決め、`out/` に `video.mp4`・`thumbnail.jpg`・`meta.json` を出力 |
-| `youtube_upload.py` | `out/` をアップロードし、`upload_history.json` に追記(標準ライブラリのみ) |
+| `lofi.py` | Shortsの `meta.json` から、同じ曲・同じねこの lo-fi 横長動画を `out_lofi/` に出力 |
+| `youtube_upload.py` | `out/` をアップロードし、`upload_history.json` に追記(標準ライブラリのみ)。`--lofi` で `out_lofi/` をShortsの1時間後に予約公開し、同じ回の記録に `lofi_video_id` などを追記 |
 | `posted_today.py` | 定期実行で、最後の投稿から12時間以内か(=もう投稿済みか)を判定する |
 | `get_youtube_refresh_token.py` | リフレッシュトークンの取得(ローカルで一度だけ) |
 | `upload_history.json` | 投稿済み記録。`key` は `song:曲ID:何回目`(以前の気まぐれの回は曲の署名)、`song` は曲ID |
 | `thumbnails/` | 投稿ごとの静止画(`001.jpg` など)。サムネイルを手動設定する用 |
-| `.github/workflows/post.yml` | 生成 → artifact → 投稿 → 履歴コミット。失敗時はIssueで通知 |
+| `.github/workflows/post.yml` | 生成 → artifact → 投稿 → 履歴コミット → lo-fi の生成・予約投稿 → 履歴コミット。失敗時はIssueで通知(lo-fi の失敗はShortsに影響しない) |
 
 画面上部は「このねこ、何の曲を弾く？」の問いかけのみ。番号は画面に出さず、
 YouTubeのタイトル末尾(`ねこが歩くと、音楽になる。🐾 #12`)にだけ付ける。
@@ -38,6 +45,8 @@ python3 make_video.py --out out              # 本番と同じ選び方で1本
 python3 make_video.py --out out --seed 1     # シード指定
 python3 make_video.py --out out --song twinkle   # 曲を指定(曲IDは songs.py)
 python3 make_video.py --out out --month 12       # 12月として選ぶ
+python3 lofi.py --meta out/meta.json --out out_lofi   # 上で作ったShortsと同じ曲・同じねこの lo-fi(数分かかる)
+python3 lofi.py twinkle --out out_lofi --still        # lo-fi の試作(静止画だけ)
 ```
 
 ## 初回セットアップ

@@ -6,9 +6,12 @@ Shortsで使っている冒頭のフレーズ(songs.MELODIES)をもとに、
 ねこが弾く(足の下の鍵盤が鳴る)のはメロディだけ。エレピ・ベース・ドラム・レコードのノイズ・雨音は、
 ねこの部屋で流れているバンドの音として重ねる。
 
-使い方: python3 lofi.py twinkle --out out_lofi [--seed 1] [--fur orange]
+使い方:
+  python3 lofi.py --meta out/meta.json --out out_lofi   # 本番: Shortsと同じ曲・同じねこで作る
+  python3 lofi.py twinkle --out out_lofi [--seed 1] [--fur orange] [--still]   # 試作
 """
 import argparse
+import json
 import math
 import random
 import subprocess
@@ -26,7 +29,38 @@ from text import SERIF_L, draw_text
 # 曲ごとの設定。tonic: 主音(0=ド)、minor: 短調、meter: 1小節の拍数、
 # unit: 楽譜の1拍が lo-fi の何拍か、pickup: 弱起(楽譜の拍数)、bpm: lo-fi のテンポ
 LOFI = {
+    "nekofunjatta": dict(tonic=6, minor=False, meter=4, bpm=74),  # 編曲は arrange_nekofunjatta(手作業)
     "twinkle": dict(tonic=7, minor=False, meter=4, unit=1, pickup=0, bpm=74),
+    "kaeru": dict(tonic=0, minor=False, meter=4, unit=1, pickup=0, bpm=76,
+                 chords=[(0, "maj7"), (5, "maj7"), (7, "7"), (0, "maj7"), (0, "maj7"), (5, "maj7"), (7, "7"), (0, "maj7")]),
+    "mary": dict(tonic=0, minor=False, meter=4, unit=1, pickup=0, bpm=74,
+                chords=[(0, "maj7"), (0, "maj7"), (0, "maj7"), (0, "maj7"), (7, "7"), (7, "7"), (0, "maj7"), (0, "maj7")]),
+    "choucho": dict(tonic=7, minor=False, meter=4, unit=1, pickup=0, bpm=74),
+    "london": dict(tonic=7, minor=False, meter=4, unit=1, pickup=0, bpm=74,
+                  chords=[(0, "maj7"), (0, "maj7"), (0, "maj7"), (0, "maj7"), (7, "7"), (7, "7"), (0, "maj7"), (0, "maj7")]),
+    "jinglebells": dict(tonic=0, minor=False, meter=4, unit=1, pickup=0, bpm=80),
+    "joy": dict(tonic=7, minor=False, meter=4, unit=1, pickup=0, bpm=72,
+               chords=[(0, "maj7"), (0, "maj7"), (7, "7"), (7, "7"), (0, "maj7"), (0, "maj7"), (7, "7"), (7, "7")]),
+    "unmei": dict(tonic=5, minor=True, meter=4, unit=0.5, pickup=0, bpm=70,
+                  chords=[(0, "m7"), (0, "m7"), (7, "7"), (7, "7"), (7, "7"), (7, "7"), (0, "m7"), (0, "m7")]),
+    "turkish": dict(tonic=6, minor=True, meter=4, unit=0.5, pickup=4, bpm=76),
+    "wedding": dict(tonic=0, minor=False, meter=4, unit=1, pickup=1, bpm=68,
+                    chords=[(0, "maj7"), (5, "maj7"), (7, "7"), (0, "maj7")]),
+    "saints": dict(tonic=0, minor=False, meter=4, unit=1, pickup=3, bpm=80),
+    "hotaru": dict(tonic=0, minor=False, meter=4, unit=1, pickup=1, bpm=70,
+                  chords=[(0, "maj7"), (0, "maj7"), (7, "7"), (7, "7"), (0, "maj7"), (0, "maj7"), (5, "maj7"), (5, "maj7")]),
+    "yankee": dict(tonic=0, minor=False, meter=4, unit=1, pickup=0, bpm=78,
+                  chords=[(0, "maj7"), (0, "maj7"), (0, "maj7"), (7, "7"), (0, "maj7"), (0, "maj7"), (0, "maj7"), (7, "7")]),
+    "macdonald": dict(tonic=0, minor=False, meter=4, unit=1, pickup=0, bpm=76),
+    "goinghome": dict(tonic=7, minor=False, meter=4, unit=1, pickup=0, bpm=64),
+    "silentnight": dict(tonic=0, minor=False, meter=3, unit=0.5, pickup=0, bpm=66,
+                       chords=[(0, "maj7"), (0, "maj7"), (0, "maj7"), (0, "maj7")]),
+    "joytotheworld": dict(tonic=5, minor=False, meter=4, unit=0.5, pickup=0, bpm=72,
+                         chords=[(0, "maj7"), (5, "maj7"), (7, "7"), (0, "maj7")]),
+    "wewish": dict(tonic=0, minor=False, meter=3, unit=1, pickup=1, bpm=84,
+                  chords=[(0, "maj7"), (5, "maj7"), (2, "m7"), (7, "7"), (7, "7"), (0, "maj7")]),
+    "deckthehalls": dict(tonic=0, minor=False, meter=4, unit=1, pickup=0, bpm=76,
+                        chords=[(0, "maj7"), (7, "7"), (0, "maj7"), (0, "maj7"), (7, "7"), (0, "maj7"), (0, "maj7"), (0, "maj7")]),
     "brahms": dict(tonic=0, minor=False, meter=3, unit=1, pickup=1, bpm=66,
                    chords=[(0, "maj7"), (0, "maj7"), (2, "m7"), (7, "7")]),
     "elise": dict(tonic=9, minor=True, meter=3, unit=0.5, pickup=2, bpm=72,
@@ -107,7 +141,52 @@ def third_below(m, cfg):
     return x
 
 
+def arrange_nekofunjatta(seed):
+    """ねこふんじゃった: 「ねこ・ふん・じゃっ・た」を1小節にゆったり広げ、駆け上がりと間奏を手で書いた編曲。"""
+    cfg = LOFI["nekofunjatta"]
+    rng = random.Random(seed)
+    beat = 60 / cfg["bpm"]
+    M = songs.midi
+    chords = [(0, "maj7", 0, 4), (9, "m7", 4, 8), (2, "m7", 8, 12), (7, "7", 12, 16)]
+    cat_bar = [(M("F#4"), [M("A#4"), M("C#5")])] * 2 + [(M("G#4"), [M("B4"), M("C#5")])] * 2
+    b_line = [["A#4", "C#5"], ["D#5", "C#5"], ["B4", "A#4"], ["G#4", None],
+              ["C#5", "D#5"], ["F#5", "D#5"], ["D#5", "C#5"], ["A#4", "G#4"]]
+    plan = [("intro", 4), ("A", 8), ("A2", 8), ("B", 8), ("A", 8), ("A2end", 8), ("outro", 4)]
+
+    def hum(x=0.012):
+        return rng.uniform(-x, x)
+
+    events, sections, bar0 = [], [], 0
+    for name, n in plan:
+        sections.append((name, bar0, n))
+        for i in range(n):
+            t0 = (bar0 + i) * 4 * beat
+            low, stab = cat_bar[(bar0 + i) % 4]
+            motif = name in ("A", "A2", "A2end")
+            if name == "A2" and i == 7:  # 間奏の前: 黒鍵を駆け上がる
+                for k, nn in enumerate(["F#4", "G#4", "A#4", "C#5", "D#5", "F#5", "G#5", "A#5"]):
+                    events.append((t0 + (k // 2 + (SWING if k % 2 else 0)) * beat, [M(nn)], 0.55 + 0.05 * k))
+                continue
+            if motif:
+                events += [(t0 + hum(), [low], 0.95), (t0 + beat + hum(), stab, 0.6), (t0 + 2 * beat + hum(), stab, 0.55)]
+            if name == "B":
+                for k, nn in enumerate(b_line[i]):
+                    if nn:
+                        events.append((t0 + 2 * k * beat + hum(), [M(nn)], 0.7))
+            if (motif and not (name == "A2end" and i == 7) and not (name == "A2" and i == 6)) or \
+                    (name == "intro" and i == 3) or (name == "B" and i == 7):
+                events += [(t0 + 3 * beat + hum(), [M("D#5")], 0.75), (t0 + (3 + SWING) * beat + hum(), [M("C#5")], 0.7)]
+            if name == "A2end" and i == 7:  # おしまい: 「ふん・じゃーん」
+                events += [(t0 + 4 * beat, [M("F#4")], 0.9), (t0 + 5 * beat, [M("A#4"), M("C#5")], 0.6)]
+        bar0 += n
+    events = sorted([(round(t, 4), ms, v) for t, ms, v in events], key=lambda e: e[0])
+    return dict(cfg=cfg, beat=beat, chords=chords, P=4, sections=sections, total_bars=bar0,
+                events=events, total=bar0 * 4 * beat + 2.5)
+
+
 def arrange(song_id, seed):
+    if song_id == "nekofunjatta":
+        return arrange_nekofunjatta(seed)
     cfg = LOFI[song_id]
     rng = random.Random(seed)
     phrase, P = parse_phrase(song_id, cfg)
@@ -407,14 +486,60 @@ def render_lofi(song_id, out_dir, seed, fur=None, still_only=False):
     return arr
 
 
+def lofi_title(song_id):
+    return f"{songs.SONGS[song_id][0]} lo-fi 🐾 ねこのきまぐれピアノ"
+
+
+def lofi_description(song_id):
+    name = songs.SONGS[song_id][0]
+    return "\n".join([
+        f"今日のShortsで、ねこが弾いていた曲の答えは「{name}」でした。",
+        "",
+        "雨の夜、ドット絵のねこがピアノの鍵盤の上を歩いて、知っている曲を lo-fi で弾きます。",
+        "ねこが弾くのはメロディだけ。足が踏んだ鍵盤の音が、そのまま流れています。",
+        "作業や勉強、眠る前のひとときにどうぞ。",
+        "",
+        "使っている曲は、作者が亡くなって70年以上たった曲や、作者不明の古い曲です。",
+        "",
+        "#lofi #ねこ #ピアノ #作業用BGM #ドット絵",
+    ])
+
+
+LOFI_TAGS = ["lofi", "lo-fi", "chill", "作業用BGM", "勉強用BGM", "ねこ", "猫", "ピアノ", "piano", "ドット絵",
+             "pixel art", "ねこピアノ"]
+
+
+def from_shorts_meta(meta_path, out):
+    """Shortsの meta.json(曲・シード・毛色)から、同じねこ・同じ曲の lo-fi 動画を作る。"""
+    meta = json.loads(Path(meta_path).read_text())
+    p = meta["params"]
+    song_id = p["song"]
+    if song_id not in LOFI:
+        raise SystemExit(f"{song_id} は lo-fi の設定がありません(lofi.LOFI)")
+    arr = render_lofi(song_id, out, p["seed"], p["fur"])
+    lmeta = {
+        "shorts_number": meta["number"],
+        "song": song_id,
+        "title": lofi_title(song_id),
+        "description": lofi_description(song_id),
+        "tags": LOFI_TAGS + [songs.SONGS[song_id][0].split("(")[0]],
+        "seconds": round(arr["total"]),
+    }
+    (Path(out) / "lofi_meta.json").write_text(json.dumps(lmeta, ensure_ascii=False, indent=2))
+    print(f"lo-fi: {lmeta['title']} ({lmeta['seconds']}秒) -> {Path(out) / 'lofi.mp4'}")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("song", choices=list(LOFI))
+    ap.add_argument("song", nargs="?", choices=list(LOFI))
+    ap.add_argument("--meta", help="Shortsの meta.json から作る(本番用)")
     ap.add_argument("--out", default="out_lofi")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--fur", choices=list(FURS))
     ap.add_argument("--still", action="store_true", help="静止画だけ(確認用)")
     args = ap.parse_args()
+    if args.meta:
+        return from_shorts_meta(args.meta, args.out)
     arr = render_lofi(args.song, args.out, args.seed, args.fur, args.still)
     names = {d: n for d, n in [(0, "I"), (2, "ii"), (3, "III"), (4, "iii"), (5, "IV"), (7, "V"), (8, "VI"), (9, "vi"), (10, "VII")]}
     print(songs.SONGS[args.song][0], f"{arr['total']:.0f}秒",

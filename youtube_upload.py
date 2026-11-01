@@ -1,6 +1,10 @@
 """make_video.py の出力(out/video.mp4 + out/meta.json)をYouTubeにアップロードし、
 upload_history.json に記録する。
 
+--lofi を付けると、lofi.py の出力(out_lofi/lofi.mp4 + lofi_meta.json)を、
+同じ回のShortsの投稿から LOFI_DELAY 後に公開されるよう予約してアップロードし、
+upload_history.json の同じ回の記録に lofi_video_id などを書き足す。
+
 外部ライブラリに依存しない(標準ライブラリのurllibのみ)。
 必要な環境変数: YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN
 任意: YT_CHANNEL_ID … 設定すると、アップロード先チャンネルが一致しない場合に中止する
@@ -17,7 +21,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REQUIRED_ENV = ["YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN"]
@@ -72,7 +76,10 @@ def check_channel(token, expected):
     print(f"channel ok: {items[0]['snippet']['title']}")
 
 
-def upload(token, video_path, meta, privacy):
+LOFI_DELAY = timedelta(hours=1)
+
+
+def upload(token, video_path, meta, privacy, publish_at=None):
     body = json.dumps({
         "snippet": {
             "title": meta["title"],
@@ -85,6 +92,8 @@ def upload(token, video_path, meta, privacy):
             "privacyStatus": privacy,
             "selfDeclaredMadeForKids": False,
             "embeddable": True,
+            # 予約公開: 非公開でアップロードし、この時刻に YouTube が自動で公開する
+            **({"publishAt": publish_at.strftime("%Y-%m-%dT%H:%M:%SZ")} if publish_at else {}),
         },
     }).encode()
     size = video_path.stat().st_size
@@ -95,7 +104,7 @@ def upload(token, video_path, meta, privacy):
         "X-Upload-Content-Length": str(size),
     })
     location = headers.get("Location") or headers.get("location")
-    # 動画は1〜2MBなので一括PUT。5xx・通信断のときだけ再試行する
+    # Shortsは1〜2MB、lo-fiは20MB前後なので一括PUT。5xx・通信断のときだけ再試行する
     for attempt in range(4):
         try:
             _, _, res = request(location, data=video_path.read_bytes(), method="PUT", headers={
@@ -130,12 +139,62 @@ def set_thumbnail(token, video_id, image_path):
     return True
 
 
+def connect():
+    missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+    if missing:
+        print(f"GitHub Secrets が未設定です: {', '.join(missing)}(README の初回セットアップ手順4)", file=sys.stderr)
+        sys.exit(2)
+    try:
+        token = get_access_token()
+    except TokenInvalid as e:
+        print(f"リフレッシュトークンが無効です。README の手順で再取得してください。\n{e}", file=sys.stderr)
+        set_output("token_invalid", "true")
+        sys.exit(3)
+    if os.environ.get("YT_CHANNEL_ID"):
+        check_channel(token, os.environ["YT_CHANNEL_ID"])
+    return token
+
+
+def main_lofi(args):
+    out = Path(args.dir)
+    meta = json.loads((out / "lofi_meta.json").read_text())
+    history_path = Path(args.history)
+    history = json.loads(history_path.read_text())
+    entry = next((h for h in history if h["number"] == meta["shorts_number"]), None)
+    if entry is None:
+        raise SystemExit(f"#{meta['shorts_number']} のShortsが履歴にありません")
+    if entry.get("lofi_video_id"):
+        print(f"#{meta['shorts_number']} の lo-fi は投稿済みです: {entry['lofi_video_id']}")
+        return
+    token = connect()
+    publish_at = datetime.fromisoformat(entry["uploaded_at"]) + LOFI_DELAY
+    if entry.get("privacy", "public") != "public":
+        # Shortsを試しに非公開・限定公開で上げた回は、lo-fi も同じ公開設定にして予約しない
+        publish_at, args.privacy = None, entry["privacy"]
+    elif publish_at < datetime.now(timezone.utc) + timedelta(minutes=10):
+        # 再実行などで予定時刻を過ぎていたら、すぐ公開する(予約の時刻は未来でないといけない)
+        publish_at = None
+    privacy = "private" if publish_at else args.privacy
+    video_id = upload(token, out / "lofi.mp4", meta, privacy, publish_at)
+    print(f"uploaded: https://youtu.be/{video_id}" + (f" (公開予定 {publish_at.isoformat()})" if publish_at else ""))
+    thumb = out / "lofi_thumb.jpg"
+    entry.update({
+        "lofi_video_id": video_id,
+        "lofi_publish_at": (publish_at or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
+        "lofi_thumbnail_set": set_thumbnail(token, video_id, thumb) if thumb.exists() else False,
+    })
+    history_path.write_text(json.dumps(history, ensure_ascii=False, indent=2) + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default="out")
     ap.add_argument("--history", default=str(Path(__file__).parent / "upload_history.json"))
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
+    ap.add_argument("--lofi", action="store_true", help="lo-fi の横長動画を、Shortsの1時間後に予約公開する")
     args = ap.parse_args()
+    if args.lofi:
+        return main_lofi(args)
 
     out = Path(args.dir)
     meta = json.loads((out / "meta.json").read_text())
@@ -144,21 +203,7 @@ def main():
     if any(h["key"] == meta["key"] for h in history):
         raise SystemExit(f"投稿済みのパラメータです: {meta['key']}")
 
-    missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
-    if missing:
-        print(f"GitHub Secrets が未設定です: {', '.join(missing)}(README の初回セットアップ手順4)", file=sys.stderr)
-        sys.exit(2)
-
-    try:
-        token = get_access_token()
-    except TokenInvalid as e:
-        print(f"リフレッシュトークンが無効です。README の手順で再取得してください。\n{e}", file=sys.stderr)
-        set_output("token_invalid", "true")
-        sys.exit(3)
-
-    if os.environ.get("YT_CHANNEL_ID"):
-        check_channel(token, os.environ["YT_CHANNEL_ID"])
-
+    token = connect()
     video_id = upload(token, out / "video.mp4", meta, args.privacy)
     print(f"uploaded: https://youtube.com/shorts/{video_id}")
     set_output("video_id", video_id)
