@@ -77,6 +77,12 @@ def pick_song(history, rng, month, only=None):
     return song_id, used.get(song_id, 0) + 1
 
 
+def pick_fur(history, rng):
+    """毛色をランダムに選ぶ。前の2回と同じ毛色は選ばない(同じ色が続かないように)。"""
+    recent = {h.get("fur") for h in history[-2:]}
+    return rng.choice([f for f in FURS if f not in recent])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="out")
@@ -101,7 +107,7 @@ def main():
         raise RuntimeError(f"{song_id}: ねこの足が鍵盤に乗っていない打鍵がある {bad}")
     # 同じ曲を2周目以降に使っても投稿済みチェックにかからないよう、何回目かを含める
     signature = f"song:{song_id}:{nth}"
-    fur = args.fur or rng.choice(list(FURS))
+    fur = args.fur or pick_fur(history, rng)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
